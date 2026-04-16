@@ -347,6 +347,31 @@ class LocalProxyChannel(BaseChannel):
         if not self.boss_wxid: return False
         return data.get("sessionId", "") == self.boss_wxid
 
+    def _is_boss_private_chat(self, data):
+        """判断是否为老板的私聊消息（非群聊）"""
+        if not self._is_boss_sender(data):
+            return False
+        sid = data.get("sessionId", "")
+        grp = data.get("groupName", "")
+        # 老板私聊：sessionId 是 boss_wxid 且没有 groupName 且不以 @chatroom 结尾
+        stype = "group" if (grp or sid.endswith("@chatroom")) else "private"
+        return stype == "private"
+
+    def _get_session_id_for_message(self, data):
+        """
+        根据消息发送者身份生成会话 ID：
+        - 老板私聊：使用固定的全局会话 ID，可查看所有历史
+        - 老板群聊/普通用户：使用原始 sessionId，保持隔离
+        """
+        sid = data.get("sessionId", "unknown")
+        
+        # 老板私聊 -> 全局会话
+        if self._is_boss_private_chat(data):
+            return f"boss_global_session_{self.boss_wxid}"
+        
+        # 其他情况（包括老板在群聊）-> 正常隔离
+        return sid
+
     def _should_trigger(self, sid, content):
         if self.trigger_mode == "always": return True
         ctx = G_SESSIONS.get(sid)
@@ -359,29 +384,93 @@ class LocalProxyChannel(BaseChannel):
 
     # ==================== 老板审批 ====================
     async def _handle_boss_response(self, data, content):
+        """
+        处理老板的消息：
+        1. 如果有待审批，视为审批响应
+        2. 如果是老板私聊且无待审批，视为全局查询，注入其他会话摘要
+        """
         pending = [a for a in G_APPROVALS.values() if a.status == "pending"]
-        if not pending:
-            await audit("boss_ignored", "approval", f"老板消息无待审批: {content[:50]}")
-            return
-        approval = max(pending, key=lambda a: a.created_at)
-        rl = content.strip().lower()
-        reject = any(kw in rl for kw in ["拒绝","不行","不要","否","no"])
-        if reject:
-            await self._do_respond_approval(approval.id, content, False)
-            task = G_TASKS.get(approval.task_id)
-            if task:
-                S.add(task.session_id, {"id":str(uuid.uuid4()),"session_id":task.session_id,
-                    "text":"很抱歉，您的请求未获得批准。","created_at":_now(),"msg_type":"system"})
+        
+        # 检查是否为老板私聊（非群聊）
+        is_boss_private = self._is_boss_private_chat(data)
+        
+        if pending:
+            # 有待审批事项，优先处理审批
+            approval = max(pending, key=lambda a: a.created_at)
+            rl = content.strip().lower()
+            reject = any(kw in rl for kw in ["拒绝","不行","不要","否","no"])
+            if reject:
+                await self._do_respond_approval(approval.id, content, False)
+                task = G_TASKS.get(approval.task_id)
+                if task:
+                    S.add(task.session_id, {"id":str(uuid.uuid4()),"session_id":task.session_id,
+                        "text":"很抱歉，您的请求未获得批准。","created_at":_now(),"msg_type":"system"})
+            else:
+                await self._do_respond_approval(approval.id, content, True)
+                task = G_TASKS.get(approval.task_id)
+                if task:
+                    task.status = "processing"; task.updated_at = _now()
+                    self._route_enqueue(task.agent_id, {
+                        "session_id": f"_continue_{task.id}",
+                        "text": f"[老板已批准] 指示：{content}\n继续执行：{task.content[:200]}",
+                        "metadata": {"_continuation":True,"_original_task_id":task.id,"_original_session_id":task.session_id}
+                    })
+        elif is_boss_private:
+            # 老板私聊且无待审批 -> 全局查询模式，注入其他会话摘要
+            await self._handle_boss_global_query(content)
+    
+    async def _handle_boss_global_query(self, content):
+        """
+        处理老板的全局查询请求：
+        1. 收集所有活跃会话的摘要
+        2. 将摘要作为背景信息注入到老板的全局会话中
+        3. 触发 Agent 处理
+        """
+        # 获取全局会话 ID
+        boss_sid = f"boss_global_session_{self.boss_wxid}"
+        ctx = self._get_session(boss_sid, self.boss_name or "老板", "private")
+        ctx.last_message_time = _now()
+        
+        # 收集所有非老板会话的摘要
+        session_summaries = []
+        for sid, sctx in G_SESSIONS.items():
+            # 跳过老板自己的全局会话
+            if sid.startswith("boss_global_session_"):
+                continue
+            # 只包含有活跃任务的会话或最近有消息的会话
+            if sctx.active_task_id or sctx.message_count > 0:
+                summary = f"- {sctx.display_name}({sctx.session_type}): "
+                if sctx.active_task_id:
+                    task = G_TASKS.get(sctx.active_task_id)
+                    if task:
+                        summary += f"[任务:{task.status}] {task.content[:50]}..."
+                else:
+                    last_msgs = sctx.message_buffer[-3:] if sctx.message_buffer else []
+                    if last_msgs:
+                        summary += f"最近消息:{len(last_msgs)}条"
+                session_summaries.append(summary)
+        
+        # 构建带上下文的查询
+        context_header = ""
+        if session_summaries:
+            context_header = "[全局会话摘要]\n" + "\n".join(session_summaries) + "\n\n[老板查询]: "
         else:
-            await self._do_respond_approval(approval.id, content, True)
-            task = G_TASKS.get(approval.task_id)
-            if task:
-                task.status = "processing"; task.updated_at = _now()
-                self._route_enqueue(task.agent_id, {
-                    "session_id": f"_continue_{task.id}",
-                    "text": f"[老板已批准] 指示: {content}\n继续执行: {task.content[:200]}",
-                    "metadata": {"_continuation":True,"_original_task_id":task.id,"_original_session_id":task.session_id}
-                })
+            context_header = "[全局会话摘要]\n暂无活跃会话\n\n[老板查询]: "
+        
+        combined = context_header + content
+        
+        # 创建任务并路由
+        task = self._new_task(boss_sid, self.boss_name or "老板", "private", "老板私聊", combined, self.agent_id)
+        ctx.total_processed += 1
+        
+        print(f"\n[🌐 老板全局查询]: {content[:50]}... (包含{len(session_summaries)}个会话摘要)")
+        
+        self._route_enqueue(self.agent_id, {
+            "session_id": f"weflow_{boss_sid}",
+            "text": combined,
+            "metadata": {"_task_id": task.id, "session_id": f"weflow_{boss_sid}", "_global_query": True}
+        })
+        asyncio.create_task(self._poll_reply(f"weflow_{boss_sid}", 120, "老板私聊"))
 
     async def _do_respond_approval(self, aid, response, approved):
         a = G_APPROVALS.get(aid)
@@ -533,19 +622,22 @@ class LocalProxyChannel(BaseChannel):
         processed_keys.add(mk)
         if len(processed_keys) > 5000: processed_keys.clear()
 
-        sid = data.get("sessionId", "unknown")
+        # 使用新的会话 ID 生成逻辑（老板私聊 -> 全局会话，其他 -> 隔离）
+        sid = self._get_session_id_for_message(data)
+        orig_sid = data.get("sessionId", "unknown")  # 原始 sessionId 用于显示
+        
         name = data.get("sourceName", "未知")
         grp = data.get("groupName", "")
         content = data.get("content", "").strip()
         if not content: return
 
-        stype = "group" if (grp or sid.endswith("@chatroom")) else "private"
+        stype = "group" if (grp or orig_sid.endswith("@chatroom")) else "private"
         dname = grp or name
         ctx = self._get_session(sid, dname, stype)
         ctx.last_message_time = _now(); ctx.message_count += 1
         src = f"微信-{'群['+grp+']' if grp else '私聊'}-{name}"
 
-        # ① 老板
+        # ① 老板响应处理（老板私聊或群聊中的老板消息）
         if self._is_boss_sender(data):
             print(f"\n[📥 老板 {src}]: {content}")
             await self._handle_boss_response(data, content); return
