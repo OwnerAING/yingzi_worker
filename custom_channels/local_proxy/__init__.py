@@ -390,7 +390,12 @@ class LocalProxyChannel(BaseChannel):
         a.boss_response = response; a.responded_at = _now()
         task = G_TASKS.get(a.task_id)
         if task:
+            # 审批通过后，任务状态设为 approved，表示正在执行中，不应被空闲超时中断
             task.status = a.status; task.boss_approved = approved; task.updated_at = _now()
+            # 重置会话的最后消息时间，防止 approved 状态的任务被误判为空闲超时
+            ctx = G_SESSIONS.get(task.session_id)
+            if ctx and approved:
+                ctx.last_message_time = _now()
         await audit("approval_responded", "approval", f"{'通过' if approved else '拒绝'}: {aid}")
         return a
 
@@ -407,14 +412,14 @@ class LocalProxyChannel(BaseChannel):
     async def _ask_boss(self, approval, task):
         src = f"{'群['+task.session_name+']' if task.source_type=='group' else task.source_name}"
         text = (
-            f"[系统指令] 用py4wx发微信 -> 收件人wxid:{self.boss_wxid}\n"
+            f"[系统指令] 用py4wx发微信 -> 收件人:{self.boss_name}\n"
             f"内容:【待审批】{src}的任务：\n"
             f"{approval.question}\n"
             f"回复「同意/拒绝」+意见即可。"
         )
         self._enqueue_proactive({
             "type": "ask_boss",
-            "target_wxid": self.boss_wxid,
+            "target_wxid": self.boss_name,
             "text": text,
             "approval_id": approval.id,
             "task_id": task.id,
@@ -427,14 +432,14 @@ class LocalProxyChannel(BaseChannel):
         src = f"{'群['+task.session_name+']' if task.source_type=='group' else task.source_name}"
         st = "已完成" if task.status == "completed" else "执行失败"
         text = (
-            f"[系统指令] 用py4wx发微信 -> 收件人wxid:{self.boss_wxid}\n"
+            f"[系统指令] 用py4wx发微信 -> 收件人:{self.boss_name}\n"
             f"内容:【任务{st}】{src}\n"
             f"内容:{task.content[:100]}\n"
             f"结果:{task.result or task.error or '无'}"
         )
         self._enqueue_proactive({
             "type": "report_boss",
-            "target_wxid": self.boss_wxid,
+            "target_wxid": self.boss_name,
             "text": text,
         })
         
@@ -483,9 +488,13 @@ class LocalProxyChannel(BaseChannel):
             for sid, ctx in list(G_SESSIONS.items()):
                 if ctx.active_task_id and now - ctx.last_message_time > self.task_idle_timeout:
                     task = G_TASKS.get(ctx.active_task_id)
-                    if task and task.status in ("processing","approved"):
+                    # 只处理 processing 状态的空闲超时，approved/awaiting_approval 状态表示正在等待或执行中，不应因空闲而终止
+                    if task and task.status == "processing":
                         task.status="completed"; task.result="[自动完成]空闲超时"; task.updated_at=_now()
                         self._deactivate(sid); await self._report_to_boss(task)
+                    # approved/approval 状态的任务需要更新 last_message_time 以防止误判超时
+                    elif task and task.status in ("approved", "awaiting_approval"):
+                        ctx.last_message_time = now  # 重置计时器
 
     async def _approval_expiry_checker(self):
         while True:

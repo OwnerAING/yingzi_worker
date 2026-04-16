@@ -281,8 +281,8 @@ async function vBoss(){
   document.getElementById('view').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div class="card"><div class="card-head"><h3>老板信息</h3></div><div class="card-body">
-        <div class="form-group"><label class="form-label">老板微信 ID (wxid)</label><input class="form-input" id="b-wxid" value="${esc(c.boss_wxid)}" placeholder="wxid_xxx"><div class="form-hint">私聊的 sessionId 即对方 wxid，在「会话监控」中查看</div></div>
-        <div class="form-group"><label class="form-label">老板备注名</label><input class="form-input" id="b-name" value="${esc(c.boss_name)}" placeholder="王总"></div>
+        <div class="form-group"><label class="form-label">老板微信名</label><input class="form-input" id="b-wxid" value="${esc(c.boss_wxid)}" placeholder="王总"><div class="form-hint">填写老板的微信昵称或备注名，用于发送微信消息</div></div>
+        <div class="form-group"><label class="form-label">老板显示名 (可选)</label><input class="form-input" id="b-name" value="${esc(c.boss_name)}" placeholder="王总"></div>
         <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-outline btn-sm" onclick="tstBoss()"><i class="fa-solid fa-paper-plane"></i> 发送测试消息</button></div>
       </div></div>
       <div class="card"><div class="card-head"><h3>审批设置</h3></div><div class="card-body">
@@ -370,7 +370,23 @@ async function vTrigger(){
 }
 async function swMode(m){
   const r=await api('/api/local-proxy/config',{method:'PUT',body:{trigger_mode:m}});
-  if(r&&r.status==='ok'){toast(m==='always'?'已切换到全量模式':'已切换到@触发模式','success');vTrigger()}
+  if(r&&r.status==='ok'){
+    toast(m==='always'?'已切换到全量模式':'已切换到@触发模式','success');
+    document.querySelectorAll('.mode-card').forEach(el=>el.classList.remove('selected'));
+    document.getElementById('mc-'+m).classList.add('selected');
+    document.getElementById('trigger-params').style.display=m==='mention'?'block':'none';
+    const card=document.getElementById('mc-'+m);
+    const pill=card.querySelector('.pill');
+    card.querySelectorAll('.pill').forEach(p=>p.remove());
+    if(pill)card.appendChild(pill);
+    else{
+      const p=document.createElement('span');
+      p.className='pill '+(m==='always'?'pill-blue':'pill-amber');
+      p.style.marginTop='12px';
+      p.textContent='当前模式';
+      card.appendChild(p);
+    }
+  }
   else toast('切换失败','error');
 }
 async function svTrParams(){
