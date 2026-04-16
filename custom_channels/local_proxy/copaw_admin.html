@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoPaw 数字员工管理平台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: { 50:'#effefa', 100:'#c8fff4', 200:'#91fee9', 300:'#53f5d9', 400:'#20e0c3', 500:'#0cc4ab', 600:'#08a08e', 700:'#0a7f73', 800:'#0d645c', 900:'#10534c', 950:'#003330' },
+        slate: { 850:'#172033' }
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background:#f1f5f9; color:#1e293b; min-height:100vh; }
+  h1,h2,h3,h4,h5 { font-family: 'Space Grotesk', 'PingFang SC', sans-serif; }
+
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+  ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+
+  /* 侧边栏 */
+  .sidebar { width:260px; min-width:260px; background:#fff; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; }
+  .sidebar-brand { padding:24px 20px 20px; border-bottom:1px solid #f1f5f9; }
+  .sidebar-brand h1 { font-size:20px; font-weight:700; color:#0a7f73; letter-spacing:-0.5px; }
+  .sidebar-brand p { font-size:11px; color:#94a3b8; margin-top:2px; letter-spacing:0.3px; }
+  .sidebar-nav { flex:1; overflow-y:auto; padding:12px 10px; }
+  .nav-group { margin-bottom:6px; }
+  .nav-group-label { font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:1.5px; padding:10px 10px 6px; }
+  .nav-link { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:8px; cursor:pointer; color:#64748b; font-size:13px; font-weight:500; transition:all .15s; position:relative; text-decoration:none; }
+  .nav-link:hover { background:#f1f5f9; color:#334155; }
+  .nav-link.active { background:#effefa; color:#0a7f73; font-weight:600; }
+  .nav-link.active::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:3px; height:20px; background:#0a7f73; border-radius:0 3px 3px 0; }
+  .nav-link i { width:18px; text-align:center; font-size:14px; }
+  .nav-link .badge-dot { margin-left:auto; background:#ef4444; color:#fff; font-size:10px; font-weight:700; padding:1px 7px; border-radius:10px; min-width:20px; text-align:center; line-height:1.5; }
+  .sidebar-footer { padding:14px 16px; border-top:1px solid #f1f5f9; font-size:11px; color:#94a3b8; display:flex; align-items:center; gap:8px; }
+
+  /* 主内容 */
+  .main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+  .topbar { height:56px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:space-between; padding:0 28px; flex-shrink:0; }
+  .topbar-title { font-size:17px; font-weight:700; color:#0f172a; }
+  .topbar-actions { display:flex; gap:8px; align-items:center; }
+  .content { flex:1; overflow-y:auto; padding:24px 28px 40px; }
+
+  /* 组件 */
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; transition:box-shadow .2s; }
+  .card:hover { box-shadow:0 1px 8px rgba(0,0,0,0.04); }
+  .card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid #f1f5f9; }
+  .card-head h3 { font-size:14px; font-weight:600; color:#334155; }
+  .card-body { padding:20px; }
+  .card-body.flush { padding:0; }
+
+  .stat-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:16px; margin-bottom:24px; }
+  .stat-card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:18px 20px; }
+  .stat-card .stat-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; margin-bottom:14px; }
+  .stat-card .stat-val { font-family:'Space Grotesk'; font-size:28px; font-weight:700; color:#0f172a; line-height:1; }
+  .stat-card .stat-lbl { font-size:12px; color:#94a3b8; margin-top:5px; font-weight:500; }
+
+  .tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .tbl thead th { text-align:left; padding:10px 14px; font-weight:600; color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.5px; border-bottom:2px solid #f1f5f9; background:#fafbfc; white-space:nowrap; }
+  .tbl tbody td { padding:11px 14px; border-bottom:1px solid #f1f5f9; color:#475569; vertical-align:middle; }
+  .tbl tbody tr:hover td { background:#f8fafc; }
+  .tbl tbody tr:last-child td { border-bottom:none; }
+
+  .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .pill-green { background:#ecfdf5; color:#059669; }
+  .pill-blue { background:#eff6ff; color:#2563eb; }
+  .pill-amber { background:#fffbeb; color:#d97706; }
+  .pill-red { background:#fef2f2; color:#dc2626; }
+  .pill-purple { background:#faf5ff; color:#9333ea; }
+  .pill-gray { background:#f1f5f9; color:#64748b; }
+
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all .15s; white-space:nowrap; }
+  .btn:active { transform:scale(0.97); }
+  .btn-brand { background:#0a7f73; color:#fff; }
+  .btn-brand:hover { background:#086961; }
+  .btn-outline { background:#fff; color:#475569; border:1px solid #d1d5db; }
+  .btn-outline:hover { background:#f9fafb; border-color:#9ca3af; }
+  .btn-danger { background:#fef2f2; color:#dc2626; }
+  .btn-danger:hover { background:#fee2e2; }
+  .btn-success { background:#ecfdf5; color:#059669; }
+  .btn-success:hover { background:#d1fae5; }
+  .btn-sm { padding:5px 11px; font-size:12px; border-radius:6px; }
+  .btn-ghost { background:transparent; color:#64748b; }
+  .btn-ghost:hover { background:#f1f5f9; color:#334155; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  .form-group { margin-bottom:18px; }
+  .form-label { display:block; font-size:12px; font-weight:600; color:#475569; margin-bottom:6px; }
+  .form-hint { font-size:11px; color:#94a3b8; margin-top:4px; line-height:1.5; }
+  .form-input, .form-select, .form-textarea { width:100%; padding:9px 13px; background:#fff; border:1px solid #d1d5db; border-radius:8px; color:#1e293b; font-size:13px; outline:none; transition:border-color .15s, box-shadow .15s; font-family:inherit; }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color:#0cc4ab; box-shadow:0 0 0 3px rgba(12,196,171,.1); }
+  .form-textarea { resize:vertical; min-height:80px; }
+  .form-select { cursor:pointer; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 11px center; padding-right:32px; }
+  .form-select option { background:#fff; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  .toggle { width:44px; height:24px; border-radius:12px; background:#d1d5db; cursor:pointer; position:relative; transition:background .2s; flex-shrink:0; }
+  .toggle.on { background:#0a7f73; }
+  .toggle::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.15); }
+  .toggle.on::after { transform:translateX(20px); }
+
+  .filter-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+  .filter-btn { padding:6px 14px; border-radius:20px; font-size:12px; font-weight:500; cursor:pointer; border:1px solid #e2e8f0; background:#fff; color:#64748b; transition:all .15s; }
+  .filter-btn:hover { border-color:#0cc4ab; color:#0a7f73; }
+  .filter-btn.active { background:#0a7f73; color:#fff; border-color:#0a7f73; }
+
+  .empty { text-align:center; padding:48px 20px; color:#94a3b8; }
+  .empty i { font-size:36px; margin-bottom:12px; opacity:.4; display:block; }
+  .empty p { font-size:13px; }
+
+  .log-entry { display:flex; gap:12px; padding:9px 0; border-bottom:1px solid #f1f5f9; font-size:12px; }
+  .log-time { color:#94a3b8; white-space:nowrap; font-family:'Space Grotesk'; min-width:72px; font-size:11px; }
+  .log-detail { color:#475569; flex:1; }
+
+  /* 模态框 */
+  .overlay { position:fixed; inset:0; background:rgba(15,23,42,.35); backdrop-filter:blur(3px); z-index:100; display:none; align-items:center; justify-content:center; }
+  .overlay.open { display:flex; }
+  .modal { background:#fff; border-radius:16px; width:92%; max-width:520px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.12); animation:modalIn .2s; }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid #f1f5f9; }
+  .modal-head h3 { font-size:16px; font-weight:700; color:#0f172a; }
+  .modal-close { width:30px; height:30px; border-radius:8px; border:none; background:transparent; color:#94a3b8; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .modal-close:hover { background:#f1f5f9; color:#475569; }
+  .modal-body { padding:22px; }
+  .modal-foot { display:flex; justify-content:flex-end; gap:8px; padding:16px 22px; border-top:1px solid #f1f5f9; }
+
+  /* Toast */
+  .toast-wrap { position:fixed; top:20px; right:20px; z-index:200; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .toast { padding:12px 18px; border-radius:10px; font-size:13px; font-weight:500; display:flex; align-items:center; gap:8px; animation:toastIn .3s; pointer-events:auto; box-shadow:0 4px 16px rgba(0,0,0,.08); }
+  .toast-success { background:#ecfdf5; color:#059669; border:1px solid #a7f3d0; }
+  .toast-error { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+  .toast-info { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; }
+  .toast-warn { background:#fffbeb; color:#d97706; border:1px solid #fde68a; }
+
+  .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .status-dot.green { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.2); }
+  .status-dot.red { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.2); }
+
+  .mode-card { border:2px solid #e2e8f0; border-radius:14px; padding:28px 20px; cursor:pointer; transition:all .2s; text-align:center; }
+  .mode-card:hover { border-color:#99f6e4; background:#f0fdfa; }
+  .mode-card.selected { border-color:#0a7f73; background:#effefa; }
+  .mode-card .mode-icon { width:56px; height:56px; border-radius:14px; margin:0 auto 14px; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .mode-card h4 { font-size:15px; font-weight:700; color:#0f172a; margin-bottom:6px; }
+  .mode-card p { font-size:12px; color:#94a3b8; line-height:1.6; }
+
+  .info-callout { display:flex; gap:10px; padding:14px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; font-size:12px; color:#64748b; line-height:1.7; }
+  .info-callout i { color:#0a7f73; margin-top:2px; flex-shrink:0; }
+
+  @keyframes modalIn { from { opacity:0; transform:translateY(16px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+  @keyframes toastIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+  @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+  @media (max-width:1024px) { .stat-grid { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:768px) { .sidebar { display:none; } .stat-grid { grid-template-columns:repeat(2,1fr); } .form-row { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1><i class="fa-solid fa-bolt" style="margin-right:4px"></i> CoPaw</h1>
+      <p>Digital Employee Gateway</p>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-group-label">概览</div>
+        <a class="nav-link active" data-v="dashboard" onclick="go('dashboard')"><i class="fa-solid fa-chart-pie"></i>仪表盘</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">核心配置</div>
+        <a class="nav-link" data-v="boss" onclick="go('boss')"><i class="fa-solid fa-user-tie"></i>老板与审批</a>
+        <a class="nav-link" data-v="trigger" onclick="go('trigger')"><i class="fa-solid fa-bolt-lightning"></i>触发模式</a>
+        <a class="nav-link" data-v="blacklist" onclick="go('blacklist')"><i class="fa-solid fa-ban"></i>黑名单<span class="badge-dot" id="nb-bl" style="display:none">0</span></a>
+        <a class="nav-link" data-v="policy" onclick="go('policy')"><i class="fa-solid fa-shield-halved"></i>访问策略</a>
+        <a class="nav-link" data-v="routing" onclick="go('routing')"><i class="fa-solid fa-route"></i>路由规则</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">运行监控</div>
+        <a class="nav-link" data-v="tasks" onclick="go('tasks')"><i class="fa-solid fa-list-check"></i>任务中心<span class="badge-dot" id="nb-tk" style="display:none">0</span></a>
+        <a class="nav-link" data-v="approvals" onclick="go('approvals')"><i class="fa-solid fa-clock-rotate-left"></i>审批队列<span class="badge-dot" id="nb-ap" style="display:none">0</span></a>
+        <a class="nav-link" data-v="sessions" onclick="go('sessions')"><i class="fa-solid fa-comments"></i>会话监控</a>
+        <a class="nav-link" data-v="audit" onclick="go('audit')"><i class="fa-solid fa-rectangle-list"></i>操作日志</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-label">系统</div>
+        <a class="nav-link" data-v="settings" onclick="go('settings')"><i class="fa-solid fa-gear"></i>系统设置</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer" id="sb-st"><span class="status-dot green"></span>WeFlow 已连接</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <h2 class="topbar-title" id="page-title">仪表盘</h2>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </header>
+    <div class="content" id="view"></div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head"><h3 id="modal-title"></h3><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+const TITLES = { dashboard:'仪表盘', boss:'老板与审批', trigger:'触发模式', blacklist:'黑名单管理', policy:'访问策略', routing:'路由规则', tasks:'任务中心', approvals:'审批队列', sessions:'会话监控', audit:'操作日志', settings:'系统设置' };
+let curView = 'dashboard';
+
+function ts(t){ if(!t)return'-'; return new Date(t*1e3).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+function tr(s,n){ n=n||50; return s&&s.length>n?s.slice(0,n)+'...':(s||'-'); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+async function api(p,o){ o=o||{}; try{ const r=await fetch(p,{headers:{'Content-Type':'application/json'},...o,body:o.body?JSON.stringify(o.body):undefined}); return await r.json(); }catch(e){ toast('网络请求失败','error'); return null; } }
+function toast(msg,type){ type=type||'info'; const ic={success:'fa-circle-check',error:'fa-circle-xmark',info:'fa-circle-info',warn:'fa-triangle-exclamation'}; const el=document.createElement('div'); el.className='toast toast-'+type; el.innerHTML=`<i class="fa-solid ${ic[type]}"></i>${esc(msg)}`; document.getElementById('toast-wrap').appendChild(el); setTimeout(()=>{el.style.opacity='0';el.style.transform='translateX(40px)';el.style.transition='all .3s';setTimeout(()=>el.remove(),300)},3500); }
+function ub(id,n){ const el=document.getElementById(id); if(!el)return; el.style.display=n>0?'':'none'; el.textContent=n>99?'99+':n; }
+function stT(s){ return{pending:'待处理',processing:'处理中',awaiting_approval:'待审批',approved:'已批准',rejected:'已拒绝',completed:'已完成',failed:'失败',expired:'已过期'}[s]||s; }
+function stP(s){ return{processing:'blue',awaiting_approval:'amber',approved:'purple',completed:'green',failed:'red',rejected:'red',expired:'gray',pending:'gray'}[s]||'gray'; }
+
+function go(v){ curView=v; document.querySelectorAll('.nav-link').forEach(a=>a.classList.toggle('active',a.dataset.v===v)); document.getElementById('page-title').textContent=TITLES[v]||v; document.getElementById('topbar-actions').innerHTML=''; renderView(v); }
+function setTopActions(html){ document.getElementById('topbar-actions').innerHTML=html; }
+
+function openModal(title,bodyHtml,footHtml){ document.getElementById('modal-title').textContent=title; document.getElementById('modal-body').innerHTML=bodyHtml; document.getElementById('modal-foot').innerHTML=footHtml||''; document.getElementById('overlay').classList.add('open'); }
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+
+function loading(){ return '<div style="display:flex;justify-content:center;padding:80px"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;color:#94a3b8"></i></div>'; }
+
+async function renderView(v){
+  const el=document.getElementById('view'); el.innerHTML=loading();
+  const fn={ dashboard:vDash, boss:vBoss, trigger:vTrigger, blacklist:vBlacklist, policy:vPolicy, routing:vRouting, tasks:vTasks, approvals:vApprovals, sessions:vSessions, audit:vAudit, settings:vSettings };
+  if(fn[v]) await fn[v]();
+}
+
+/* ========== 仪表盘 ========== */
+async function vDash(){
+  setTopActions('<button class="btn btn-ghost btn-sm" onclick="vDash()"><i class="fa-solid fa-arrows-rotate"></i> 刷新</button>');
+  const[s,tk,ap]=await Promise.all([api('/api/local-proxy/stats'),api('/api/local-proxy/tasks?limit=5'),api('/api/local-proxy/approvals?status=pending')]);
+  if(!s)return;
+  const el=document.getElementById('view');
+  el.innerHTML=`
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-message"></i></div><div class="stat-val">${s.total_messages||0}</div><div class="stat-lbl">总消息数</div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#059669"><i class="fa-solid fa-comments"></i></div><div class="stat-val">${s.active_sessions||0}</div><div class="stat-lbl">活跃会话</div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:#fffbeb;color:#d97706"><i class="fa-solid fa-spinner"></i></div><div class="stat-val">${s.pending_tasks||0}</div><div class="stat-lbl">处理中任务</div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:#faf5ff;color:#9333ea"><i class="fa-solid fa-clock"></i></div><div class="stat-val">${s.pending_approvals||0}</div><div class="stat-lbl">待审批</div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:#ecfdf5;color:#059669"><i class="fa-solid fa-circle-check"></i></div><div class="stat-val">${s.completed_tasks||0}</div><div class="stat-lbl">已完成</div></div>
+      <div class="stat-card"><div class="stat-icon" style="background:#fef2f2;color:#dc2626"><i class="fa-solid fa-circle-xmark"></i></div><div class="stat-val">${s.failed_tasks||0}</div><div class="stat-lbl">失败</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card"><div class="card-head"><h3><i class="fa-solid fa-circle-info" style="color:#0a7f73;margin-right:6px"></i>系统状态</h3></div><div class="card-body">
+        <div style="display:flex;flex-direction:column;gap:14px;font-size:13px">
+          ${[['WeFlow 连接',s.weflow_connected?'<span style="display:flex;align-items:center;gap:6px"><span class="status-dot green"></span>已连接</span>':'<span style="display:flex;align-items:center;gap:6px"><span class="status-dot red"></span>未连接</span>'],['触发模式',`<span class="pill ${s.trigger_mode==='always'?'blue':'amber'}">${s.trigger_mode==='always'?'全量模式':'@触发模式'}</span>`],['老板配置',s.boss_configured?'<span class="pill green">已配置</span>':'<span class="pill red">未配置</span>'],['注册 Agent',`<code style="font-size:12px;color:#475569;background:#f1f5f9;padding:2px 8px;border-radius:4px">${(s.agents||[]).join(', ')||'无'}</code>`],['黑名单',`<span style="color:#dc2626;font-weight:600">${s.blacklist_count}</span> 条`],['白名单',`<span style="color:#059669;font-weight:600">${s.whitelist_count}</span> 条`],['总会话',`${s.total_sessions||0}`]].map(([k,v])=>`<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#64748b">${k}</span>${v}</div>`).join('')}
+        </div>
+      </div></div>
+      <div class="card"><div class="card-head"><h3><i class="fa-solid fa-list-check" style="color:#d97706;margin-right:6px"></i>最新任务</h3><button class="btn btn-ghost btn-sm" onclick="go('tasks')">查看全部</button></div><div class="card-body flush">
+        ${tk?.items?.length?`<table class="tbl"><thead><tr><th>状态</th><th>内容</th><th>时间</th></tr></thead><tbody>${tk.items.slice(0,5).map(t=>`<tr><td><span class="pill pill-${stP(t.status)}">${stT(t.status)}</span></td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tr(t.content,35))}</td><td style="white-space:nowrap;font-size:11px;color:#94a3b8">${ts(t.created_at)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><i class="fa-solid fa-inbox"></i><p>暂无任务</p></div>'}
+      </div></div>
+    </div>
+    ${ap?.items?.length?`<div class="card" style="margin-top:20px"><div class="card-head"><h3><i class="fa-solid fa-bell" style="color:#d97706;margin-right:6px"></i>待处理审批</h3><button class="btn btn-ghost btn-sm" onclick="go('approvals')">管理审批</button></div><div class="card-body flush"><table class="tbl"><thead><tr><th>审批ID</th><th>任务</th><th>问题</th><th>时间</th><th style="text-align:right">操作</th></tr></thead><tbody>${ap.items.map(a=>`<tr><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8">${a.id}</td><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8">${a.task_id}</td><td>${esc(tr(a.question,50))}</td><td style="font-size:11px;color:#94a3b8">${ts(a.created_at)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-success btn-sm" onclick="hAp('${a.id}',true)"><i class="fa-solid fa-check"></i> 通过</button> <button class="btn btn-danger btn-sm" onclick="hAp('${a.id}',false)"><i class="fa-solid fa-xmark"></i> 拒绝</button></td></tr>`).join('')}</tbody></table></div></div>`:''}`;
+}
+
+/* ========== 老板与审批 ========== */
+async function vBoss(){
+  setTopActions('<button class="btn btn-brand btn-sm" onclick="svB()"><i class="fa-solid fa-floppy-disk"></i> 保存配置</button>');
+  const c=await api('/api/local-proxy/config'); if(!c)return;
+  document.getElementById('view').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card"><div class="card-head"><h3>老板信息</h3></div><div class="card-body">
+        <div class="form-group"><label class="form-label">老板微信 ID (wxid)</label><input class="form-input" id="b-wxid" value="${esc(c.boss_wxid)}" placeholder="wxid_xxx"><div class="form-hint">私聊的 sessionId 即对方 wxid，在「会话监控」中查看</div></div>
+        <div class="form-group"><label class="form-label">老板备注名</label><input class="form-input" id="b-name" value="${esc(c.boss_name)}" placeholder="王总"></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-outline btn-sm" onclick="tstBoss()"><i class="fa-solid fa-paper-plane"></i> 发送测试消息</button></div>
+      </div></div>
+      <div class="card"><div class="card-head"><h3>审批设置</h3></div><div class="card-body">
+        <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-bottom:20px"><div class="toggle ${c.boss_approval_enabled?'on':''}" id="t-approval" onclick="this.classList.toggle('on')"></div><div><div style="font-size:13px;font-weight:600;color:#1e293b">启用审批机制</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">Agent 不确定时主动发微信询问老板</div></div></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">审批超时（秒）</label><input class="form-input" id="b-timeout" type="number" value="${c.boss_approval_timeout}" min="60"></div>
+          <div class="form-group"><label class="form-label">自动批准关键词</label><input class="form-input" id="b-autokw" value="${esc((c.boss_auto_approve_keywords||[]).join(', '))}" placeholder="同意, 可以, 批, ok"><div class="form-hint">逗号分隔</div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="card" style="margin-top:20px"><div class="card-head"><h3>汇报设置</h3></div><div class="card-body">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><div class="toggle ${c.boss_report_enabled?'on':''}" id="t-report" onclick="this.classList.toggle('on')"></div><div><div style="font-size:13px;font-weight:600;color:#1e293b">启用任务汇报</div><div style="font-size:11px;color:#94a3b8;margin-top:2px">任务完成/失败时自动向老板发送微信汇报</div></div></div>
+      <div style="display:flex;gap:24px">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:#475569"><input type="checkbox" id="b-rep-ok" ${c.boss_report_on_complete?'checked':''} style="accent-color:#0a7f73;width:16px;height:16px"> 完成时汇报</label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:#475569"><input type="checkbox" id="b-rep-err" ${c.boss_report_on_error?'checked':''} style="accent-color:#0a7f73;width:16px;height:16px"> 失败时汇报</label>
+      </div>
+    </div></div>
+    <div class="card" style="margin-top:20px"><div class="card-head"><h3>Agent 提示词参考</h3><button class="btn btn-ghost btn-sm" onclick="cpPrompt()"><i class="fa-solid fa-copy"></i> 复制</button></div><div class="card-body"><pre id="prompt-text" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;font-size:12px;color:#475569;line-height:1.9;white-space:pre-wrap;font-family:inherit;max-height:280px;overflow-y:auto"></pre></div></div>`;
+  genPrompt(c);
+}
+function genPrompt(c){
+  const el=document.getElementById('prompt-text'); if(!el)return;
+  el.textContent=`你是企业数字员工，通过微信与客户沟通并执行任务。
+
+【审批机制】${c.boss_approval_enabled?'已启用。遇到不确定的情况时，使用 send() 发送 msg_type="approval_request" 的消息请求老板审批：\nsend(to=session_id, text="是否可以给客户打9折？", meta={"msg_type":"approval_request","task_id":"任务ID"})\n审批通过后系统会自动将老板指示发回给你继续执行。':'未启用，可自行决定所有操作。'}
+
+【汇报机制】${c.boss_report_enabled?'任务完成/失败时系统自动向老板汇报。也可主动发 msg_type="task_complete"/"task_failed" 触发。':'未启用。'}
+
+【老板信息】${c.boss_wxid?'wxid: '+c.boss_wxid+'，备注: '+c.boss_name:'未配置，请在管理后台配置。'}
+
+【回复客户】使用 py4wx 发送微信消息，确保专业友好。`;
+}
+async function svB(){
+  const kw=(document.getElementById('b-autokw').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const r=await api('/api/local-proxy/config',{method:'PUT',body:{boss_wxid:document.getElementById('b-wxid').value.trim(),boss_name:document.getElementById('b-name').value.trim(),boss_approval_enabled:document.getElementById('t-approval').classList.contains('on'),boss_approval_timeout:parseInt(document.getElementById('b-timeout').value)||3600,boss_report_enabled:document.getElementById('t-report').classList.contains('on'),boss_report_on_complete:document.getElementById('b-rep-ok').checked,boss_report_on_error:document.getElementById('b-rep-err').checked,boss_auto_approve_keywords:kw}});
+  if(r&&r.status==='ok'){toast('配置已保存','success');const c=await api('/api/local-proxy/config');if(c)genPrompt(c)}else toast('保存失败','error');
+}
+async function tstBoss(){const w=document.getElementById('b-wxid').value.trim();if(!w){toast('请先填写老板 wxid','warn');return}const r=await api('/api/local-proxy/proactive-send',{method:'POST',body:{target_session_id:w,text:'[管理后台测试] 收到此消息说明配置正确。'}});if(r&&r.status==='queued')toast('测试消息已入队','success');else toast('发送失败','error');}
+function cpPrompt(){navigator.clipboard.writeText(document.getElementById('prompt-text').textContent).then(()=>toast('已复制','success'));}
+
+/* ========== 触发模式 ========== */
+async function vTrigger(){
+  setTopActions('');
+  const c=await api('/api/local-proxy/config'); if(!c)return;
+  const mode=c.trigger_mode||'always';
+  document.getElementById('view').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+      <div class="mode-card ${mode==='always'?'selected':''}" id="mc-always" onclick="swMode('always')">
+        <div class="mode-icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-bolt"></i></div>
+        <h4>全量模式</h4>
+        <p>所有微信消息都直接发送给 CoPaw 处理。适合客服场景，每条消息都需要智能体回复。</p>
+        ${mode==='always'?'<span class="pill pill-blue" style="margin-top:12px">当前模式</span>':''}
+      </div>
+      <div class="mode-card ${mode==='mention'?'selected':''}" id="mc-mention" onclick="swMode('mention')">
+        <div class="mode-icon" style="background:#fffbeb;color:#d97706"><i class="fa-solid fa-at"></i></div>
+        <h4>@触发模式</h4>
+        <p>只有包含触发关键词的消息才激活。激活时发送之前缓冲的所有消息，任务期间持续处理。</p>
+        ${mode==='mention'?'<span class="pill pill-amber" style="margin-top:12px">当前模式</span>':''}
+      </div>
+    </div>
+    <div class="card" id="trigger-params" style="${mode==='mention'?'':'display:none'}">
+      <div class="card-head"><h3>@触发模式参数</h3></div>
+      <div class="card-body">
+        <div class="form-group"><label class="form-label">触发关键词（逗号分隔）</label><input class="form-input" id="tr-kw" value="${esc((c.mention_keywords||[]).join(', '))}" placeholder="@, @bot, 小助手"><div class="form-hint">消息中包含任一关键词即触发。建议至少保留 @</div></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">最大缓冲消息数</label><input class="form-input" id="tr-maxbuf" type="number" value="${c.max_buffer_messages}" min="5" max="200"><div class="form-hint">触发前最多缓存的消息条数</div></div>
+          <div class="form-group"><label class="form-label">任务空闲超时（秒）</label><input class="form-input" id="tr-idle" type="number" value="${c.task_idle_timeout}" min="30" max="3600"><div class="form-hint">任务期间多久无新消息自动结束</div></div>
+        </div>
+        <button class="btn btn-brand btn-sm" onclick="svTrParams()"><i class="fa-solid fa-floppy-disk"></i> 保存参数</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px"><div class="card-head"><h3>工作流程说明</h3></div><div class="card-body">
+      <div style="font-size:13px;color:#475569;line-height:2.2">
+        <div><span class="pill pill-blue" style="min-width:70px;justify-content:center">全量模式</span> <span style="margin-left:8px">消息 → 黑名单检查 → 策略检查 → 发送 CoPaw → 回复客户</span></div>
+        <div style="margin-top:8px"><span class="pill pill-amber" style="min-width:70px;justify-content:center">@触发模式</span> <span style="margin-left:8px">消息 → 黑名单检查 → 策略检查 → 包含关键词？</span></div>
+        <ul style="padding-left:40px;margin-top:6px;color:#64748b;font-size:12px;line-height:2">
+          <li>否 → 消息加入缓冲区（最多 N 条），等待触发</li>
+          <li>是（且无活跃任务）→ 缓冲区所有消息 + 当前消息一起发送，创建任务</li>
+          <li>是（且有活跃任务）→ 直接追加到当前任务继续处理</li>
+          <li>任务空闲超时 → 自动结束任务，回到等待触发状态</li>
+        </ul>
+      </div>
+      <div class="info-callout" style="margin-top:14px"><i class="fa-solid fa-triangle-exclamation"></i><div>任务执行期间如需询问老板，Agent 可主动发送微信，不受触发模式限制。任务完成后自动回到等待触发状态。</div></div>
+    </div></div>`;
+}
+async function swMode(m){
+  const r=await api('/api/local-proxy/config',{method:'PUT',body:{trigger_mode:m}});
+  if(r&&r.status==='ok'){toast(m==='always'?'已切换到全量模式':'已切换到@触发模式','success');vTrigger()}
+  else toast('切换失败','error');
+}
+async function svTrParams(){
+  const kw=(document.getElementById('tr-kw').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const r=await api('/api/local-proxy/config',{method:'PUT',body:{mention_keywords:kw,max_buffer_messages:parseInt(document.getElementById('tr-maxbuf').value)||50,task_idle_timeout:parseInt(document.getElementById('tr-idle').value)||300}});
+  if(r&&r.status==='ok')toast('参数已保存','success');else toast('保存失败','error');
+}
+
+/* ========== 黑名单 ========== */
+async function vBlacklist(){
+  setTopActions('<button class="btn btn-brand btn-sm" onclick="addBL()"><i class="fa-solid fa-plus"></i> 添加</button>');
+  const d=await api('/api/local-proxy/blacklist'); if(!d)return;
+  const items=d.items||[]; ub('nb-bl',items.length);
+  document.getElementById('view').innerHTML=`
+    <div class="info-callout" style="margin-bottom:20px"><i class="fa-solid fa-shield-halved"></i><div>黑名单为频道扩展字段，被拦截的会话会自动回复自定义消息（通过 py4wx 发送）。与「访问策略」中的白名单机制互为补充。</div></div>
+    <div class="card"><div class="card-body flush">
+      ${items.length?`<table class="tbl"><thead><tr><th>会话 ID</th><th>名称</th><th>原因</th><th>自动回复</th><th>添加时间</th><th style="text-align:right">操作</th></tr></thead><tbody>${items.map(e=>`<tr><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8">${esc(e.session_id)}</td><td>${esc(e.display_name)||'-'}</td><td>${esc(e.reason)||'-'}</td><td><span class="pill pill-red">${esc(e.custom_reply)}</span></td><td style="font-size:11px;color:#94a3b8">${ts(e.added_at)}</td><td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="rmBL('${esc(e.session_id)}')"><i class="fa-solid fa-trash-can"></i></button></td></tr>`).join('')}</tbody></table>`:'<div class="empty"><i class="fa-solid fa-shield-halved"></i><p>黑名单为空，所有会话均不会被拦截</p></div>'}
+    </div></div>`;
+}
+function addBL(){ openModal('添加黑名单',`<div class="form-group"><label class="form-label">会话 ID</label><input class="form-input" id="bl-sid" placeholder="wxid_xxx 或 xxx@chatroom"><div class="form-hint">在「会话监控」中查看实际的 sessionId</div></div><div class="form-group"><label class="form-label">显示名称</label><input class="form-input" id="bl-name" placeholder="某广告号"></div><div class="form-group"><label class="form-label">拉黑原因</label><input class="form-input" id="bl-reason" placeholder="发送广告"></div><div class="form-group"><label class="form-label">自动回复内容</label><input class="form-input" id="bl-reply" value="无权限"></div>`,`<button class="btn btn-outline" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doAddBL()">添加到黑名单</button>`); }
+async function doAddBL(){ const sid=document.getElementById('bl-sid').value.trim(); if(!sid){toast('请填写会话ID','warn');return} const r=await api('/api/local-proxy/blacklist',{method:'POST',body:{session_id:sid,display_name:document.getElementById('bl-name').value.trim(),reason:document.getElementById('bl-reason').value.trim(),custom_reply:document.getElementById('bl-reply').value.trim()||'无权限'}}); if(r&&r.status==='ok'){toast('已添加','success');closeModal();vBlacklist()}else toast('添加失败','error'); }
+function rmBL(sid){ openModal('确认移除',`<p style="font-size:13px;color:#475569">确定要将 <strong style="color:#1e293b">${esc(sid)}</strong> 从黑名单中移除吗？</p>`,`<button class="btn btn-outline" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doRmBL('${esc(sid)}')">确认移除</button>`); }
+async function doRmBL(sid){ const r=await api(`/api/local-proxy/blacklist/${encodeURIComponent(sid)}`,{method:'DELETE'}); if(r&&r.status==='ok'){toast('已移除','success');closeModal();vBlacklist()} }
+
+/* ========== 访问策略 ========== */
+async function vPolicy(){
+  setTopActions('<button class="btn btn-brand btn-sm" onclick="svPolicy()"><i class="fa-solid fa-floppy-disk"></i> 保存</button>');
+  const c=await api('/api/local-proxy/config'); if(!c)return;
+  document.getElementById('view').innerHTML=`
+    <div class="info-callout" style="margin-bottom:20px"><i class="fa-solid fa-circle-info"></i><div>对应 CoPaw 通用字段 <code style="background:#eff6ff;padding:1px 6px;border-radius:4px;font-size:11px">dm_policy</code> <code style="background:#eff6ff;padding:1px 6px;border-radius:4px;font-size:11px">group_policy</code> <code style="background:#eff6ff;padding:1px 6px;border-radius:4px;font-size:11px">allow_from</code> <code style="background:#eff6ff;padding:1px 6px;border-radius:4px;font-size:11px">deny_message</code>。修改后自动保存到 agent.json 并立即生效。</div></div>
+    <div class="card"><div class="card-head"><h3>策略配置</h3></div><div class="card-body">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">私聊策略 (dm_policy)</label><select class="form-select" id="p-dm"><option value="open" ${c.dm_policy==='open'?'selected':''}>open - 开放</option><option value="allowlist" ${c.dm_policy==='allowlist'?'selected':''}>allowlist - 白名单</option></select><div class="form-hint">私聊消息的访问控制策略</div></div>
+        <div class="form-group"><label class="form-label">群聊策略 (group_policy)</label><select class="form-select" id="p-grp"><option value="open" ${c.group_policy==='open'?'selected':''}>open - 开放</option><option value="allowlist" ${c.group_policy==='allowlist'?'selected':''}>allowlist - 白名单</option></select><div class="form-hint">群聊消息的访问控制策略</div></div>
+      </div>
+      <div class="form-group"><label class="form-label">拒绝提示消息 (deny_message)</label><input class="form-input" id="p-deny" value="${esc(c.deny_message)}" placeholder="无权限"><div class="form-hint">策略拒绝时自动回复的内容，通过 py4wx 发送</div></div>
+      <div class="form-group"><label class="form-label">白名单列表 (allow_from) - 每行一个 sessionId</label><textarea class="form-textarea" id="p-af" rows="6" placeholder="wxid_xxx${'\\n'}xxx@chatroom">${esc((c.allow_from||[]).join('\n'))}</textarea><div class="form-hint">当策略为 allowlist 时，只有列表中的会话才能触发 Agent</div></div>
+    </div></div>
+    <div class="card" style="margin-top:20px"><div class="card-head"><h3>权限过滤顺序</h3></div><div class="card-body">
+      <div style="font-size:13px;color:#475569;line-height:2.4">
+        <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:#fef2f2;color:#dc2626;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">1</span> 老板识别 — 判断是否为老板消息，走审批回复流程</div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:#fef2f2;color:#dc2626;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">2</span> 黑名单拦截 — 扩展字段 blacklist，命中则回复自定义消息</div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:#fffbeb;color:#d97706;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">3</span> 访问策略 — dm_policy/group_policy + allow_from，不满足则回复 deny_message</div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:#eff6ff;color:#2563eb;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">4</span> 触发模式 — always 直接通过 / mention 检查关键词</div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:#ecfdf5;color:#059669;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">5</span> 路由分发 — routing_rules 匹配目标 Agent</div>
+      </div>
+    </div></div>`;
+}
+async function svPolicy(){ const af=(document.getElementById('p-af').value||'').split('\n').map(s=>s.trim()).filter(Boolean); const r=await api('/api/local-proxy/config',{method:'PUT',body:{dm_policy:document.getElementById('p-dm').value,group_policy:document.getElementById('p-grp').value,deny_message:document.getElementById('p-deny').value.trim(),allow_from:af}}); if(r&&r.status==='ok')toast('已保存','success');else toast('保存失败','error'); }
+
+/* ========== 路由规则 ========== */
+async function vRouting(){
+  setTopActions('');
+  const c=await api('/api/local-proxy/config'); if(!c)return;
+  const rules=c.routing_rules||{}; const entries=Object.entries(rules);
+  document.getElementById('view').innerHTML=`
+    <div class="info-callout" style="margin-bottom:20px"><i class="fa-solid fa-route"></i><div>将特定群聊或会话路由到指定 Agent。优先级：<strong>精确匹配群名 → 精确匹配 sessionId → 默认 Agent</strong></div></div>
+    <div class="card"><div class="card-head"><h3>当前规则 (${entries.length})</h3></div><div class="card-body flush">
+      ${entries.length?`<table class="tbl"><thead><tr><th>匹配键（群名 / sessionId）</th><th>目标 Agent ID</th><th style="text-align:right">操作</th></tr></thead><tbody>${entries.map(([k,v])=>`<tr><td><code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:12px">${esc(k)}</code></td><td style="font-family:'Space Grotesk';font-weight:500">${esc(v)}</td><td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="rmRule('${esc(k)}')"><i class="fa-solid fa-trash-can"></i></button></td></tr>`).join('')}</tbody></table>`:'<div class="empty"><i class="fa-solid fa-route"></i><p>无路由规则，所有消息发送到默认 Agent</p></div>'}
+      <div style="padding:16px 20px;border-top:1px solid #f1f5f9">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:#334155">添加规则</div>
+        <div style="display:flex;gap:10px"><input class="form-input" id="r-key" placeholder="群名 或 sessionId" style="flex:1"><input class="form-input" id="r-agent" placeholder="Agent ID" style="flex:1"><button class="btn btn-brand btn-sm" onclick="addRule()"><i class="fa-solid fa-plus"></i> 添加</button></div>
+      </div>
+    </div></div>`;
+}
+async function addRule(){ const k=document.getElementById('r-key').value.trim(),v=document.getElementById('r-agent').value.trim(); if(!k||!v){toast('请填写完整','warn');return} const c=await api('/api/local-proxy/config'); const nr={...(c?.routing_rules||{}),[k]:v}; const r=await api('/api/local-proxy/config',{method:'PUT',body:{routing_rules:nr}}); if(r&&r.status==='ok'){toast('已添加','success');vRouting()} }
+async function rmRule(k){ const c=await api('/api/local-proxy/config'); const nr={...(c?.routing_rules||{})}; delete nr[k]; const r=await api('/api/local-proxy/config',{method:'PUT',body:{routing_rules:nr}}); if(r&&r.status==='ok'){toast('已删除','success');vRouting()} }
+
+/* ========== 任务中心 ========== */
+async function vTasks(){
+  setTopActions('<button class="btn btn-ghost btn-sm" onclick="vTasks()"><i class="fa-solid fa-arrows-rotate"></i></button>');
+  const d=await api('/api/local-proxy/tasks?limit=200'); if(!d)return;
+  const items=d.items||[];
+  ub('nb-tk',items.filter(t=>t.status==='processing'||t.status==='awaiting_approval'||t.status==='approved').length);
+  const counts={}; items.forEach(t=>{counts[t.status]=(counts[t.status]||0)+1});
+  document.getElementById('view').innerHTML=`
+    <div class="filter-bar" id="tk-filters">
+      <button class="filter-btn active" data-f="" onclick="fTbl(this,'tk-tbody','')">全部 (${items.length})</button>
+      <button class="filter-btn" data-f="processing" onclick="fTbl(this,'tk-tbody','processing')">处理中 (${counts.processing||0})</button>
+      <button class="filter-btn" data-f="awaiting_approval" onclick="fTbl(this,'tk-tbody','awaiting_approval')">待审批 (${counts.awaiting_approval||0})</button>
+      <button class="filter-btn" data-f="completed" onclick="fTbl(this,'tk-tbody','completed')">已完成 (${counts.completed||0})</button>
+      <button class="filter-btn" data-f="failed" onclick="fTbl(this,'tk-tbody','failed')">失败 (${counts.failed||0})</button>
+    </div>
+    <div class="card"><div class="card-body flush">
+      <div style="overflow-x:auto">
+        ${items.length?`<table class="tbl"><thead><tr><th>ID</th><th>会话</th><th>内容</th><th>Agent</th><th>状态</th><th>消息数</th><th>创建时间</th><th style="text-align:right">操作</th></tr></thead><tbody id="tk-tbody">${items.map(t=>`<tr data-st="${t.status}"><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8">${t.id}</td><td>${esc(tr(t.session_name,12))}</td><td title="${esc(t.content)}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tr(t.content,30))}</td><td style="font-size:11px;color:#94a3b8">${esc(t.agent_id)}</td><td><span class="pill pill-${stP(t.status)}">${stT(t.status)}</span></td><td style="text-align:center">${t.messages_count}</td><td style="font-size:11px;color:#94a3b8;white-space:nowrap">${ts(t.created_at)}</td><td style="text-align:right"><button class="btn btn-ghost btn-sm" onclick="showTask('${t.id}')"><i class="fa-solid fa-eye"></i></button></td></tr>`).join('')}</tbody></table>`:'<div class="empty"><i class="fa-solid fa-inbox"></i><p>暂无任务</p></div>'}
+      </div>
+    </div></div>`;
+}
+function fTbl(btn,tbodyId,field){ const wrap=btn.closest('.filter-bar'); wrap.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll(`#${tbodyId} tr[data-st]`).forEach(tr=>{ tr.style.display=(!field||tr.dataset.st===field)?'':'none'; }); }
+async function showTask(id){ const t=await api(`/api/local-proxy/tasks/${id}`); if(!t||t.error){toast('任务不存在','error');return} openModal('任务详情 #'+t.id,`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;margin-bottom:16px"><div><span style="color:#94a3b8;font-size:11px">状态</span><div style="margin-top:4px"><span class="pill pill-${stP(t.status)}">${stT(t.status)}</span></div></div><div><span style="color:#94a3b8;font-size:11px">Agent</span><div style="margin-top:4px">${esc(t.agent_id)}</div></div><div><span style="color:#94a3b8;font-size:11px">会话</span><div style="margin-top:4px">${esc(t.session_name)} <span style="color:#94a3b8;font-size:11px">${esc(t.session_id)}</span></div></div><div><span style="color:#94a3b8;font-size:11px">来源</span><div style="margin-top:4px">${t.source_type==='group'?'群聊':'私聊'} - ${esc(t.source_name)}</div></div><div><span style="color:#94a3b8;font-size:11px">创建时间</span><div style="margin-top:4px">${ts(t.created_at)}</div></div><div><span style="color:#94a3b8;font-size:11px">消息数</span><div style="margin-top:4px">${t.messages_count}</div></div></div><div style="margin-bottom:12px"><span style="color:#94a3b8;font-size:11px">任务内容</span><div style="margin-top:4px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;color:#475569;white-space:pre-wrap;max-height:200px;overflow-y:auto">${esc(t.content)}</div></div>${t.result?`<div style="margin-bottom:12px"><span style="color:#94a3b8;font-size:11px">执行结果</span><div style="margin-top:4px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;color:#166534;white-space:pre-wrap;max-height:200px;overflow-y:auto">${esc(t.result)}</div></div>`:''}${t.error?`<div><span style="color:#94a3b8;font-size:11px">错误信息</span><div style="margin-top:4px;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:13px;color:#991b1b">${esc(t.error)}</div></div>`:''}`,`<button class="btn btn-outline" onclick="closeModal()">关闭</button>`); }
+
+/* ========== 审批队列 ========== */
+async function vApprovals(){
+  setTopActions('<button class="btn btn-ghost btn-sm" onclick="vApprovals()"><i class="fa-solid fa-arrows-rotate"></i></button>');
+  const d=await api('/api/local-proxy/approvals'); if(!d)return;
+  const items=d.items||[]; const pn=items.filter(a=>a.status==='pending').length; ub('nb-ap',pn);
+  const counts={}; items.forEach(a=>{counts[a.status]=(counts[a.status]||0)+1});
+  document.getElementById('view').innerHTML=`
+    <div class="filter-bar">
+      <button class="filter-btn active" data-f="" onclick="fTbl(this,'ap-tbody','')">全部 (${items.length})</button>
+      <button class="filter-btn" data-f="pending" onclick="fTbl(this,'ap-tbody','pending')">待处理 (${pn})</button>
+      <button class="filter-btn" data-f="approved" onclick="fTbl(this,'ap-tbody','approved')">已通过 (${counts.approved||0})</button>
+      <button class="filter-btn" data-f="rejected" onclick="fTbl(this,'ap-tbody','rejected')">已拒绝 (${counts.rejected||0})</button>
+      <button class="filter-btn" data-f="expired" onclick="fTbl(this,'ap-tbody','expired')">已过期 (${counts.expired||0})</button>
+    </div>
+    <div class="card"><div class="card-body flush"><div style="overflow-x:auto">
+      ${items.length?`<table class="tbl"><thead><tr><th>ID</th><th>任务</th><th>审批问题</th><th>状态</th><th>老板回复</th><th>时间</th><th style="text-align:right">操作</th></tr></thead><tbody id="ap-tbody">${items.map(a=>`<tr data-st="${a.status}"><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8">${a.id}</td><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8">${a.task_id}</td><td title="${esc(a.question)}" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tr(a.question,40))}</td><td><span class="pill pill-${a.status==='pending'?'amber':a.status==='approved'?'green':'red'}">${stT(a.status)}</span></td><td style="color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(tr(a.boss_response,25))}</td><td style="font-size:11px;color:#94a3b8;white-space:nowrap">${ts(a.created_at)}</td><td style="text-align:right;white-space:nowrap">${a.status==='pending'?`<button class="btn btn-success btn-sm" onclick="hAp('${a.id}',true)"><i class="fa-solid fa-check"></i></button> <button class="btn btn-danger btn-sm" onclick="hAp('${a.id}',false)"><i class="fa-solid fa-xmark"></i></button>`:'-'}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><i class="fa-solid fa-clock-rotate-left"></i><p>无审批记录</p></div>'}
+    </div></div></div>`;
+}
+async function hAp(id,ok){ openModal(ok?'通过审批':'拒绝审批',`<div class="form-group"><label class="form-label">${ok?'批准指示（可选，会发给 Agent 继续执行）':'拒绝原因'}</label><textarea class="form-textarea" id="ap-resp" placeholder="${ok?'可以输入补充指示':'请输入拒绝原因'}"></textarea></div>`,`<button class="btn btn-outline" onclick="closeModal()">取消</button><button class="btn ${ok?'btn-brand':'btn-danger'}" onclick="doAp('${id}',${ok})">${ok?'确认通过':'确认拒绝'}</button>`); }
+async function doAp(id,ok){ const r=await api(`/api/local-proxy/approvals/${id}/respond`,{method:'POST',body:{approved:ok,response:document.getElementById('ap-resp').value.trim()}}); if(r&&r.status==='ok'){toast(ok?'已通过，任务继续执行':'已拒绝',ok?'success':'warn');closeModal();vApprovals()}else toast('操作失败','error'); }
+
+/* ========== 会话监控 ========== */
+async function vSessions(){
+  setTopActions('<button class="btn btn-ghost btn-sm" onclick="vSessions()"><i class="fa-solid fa-arrows-rotate"></i></button>');
+  const d=await api('/api/local-proxy/sessions'); if(!d)return;
+  const items=d.items||[];
+  document.getElementById('view').innerHTML=`
+    <div class="card"><div class="card-body flush"><div style="overflow-x:auto">
+      ${items.length?`<table class="tbl"><thead><tr><th>会话 ID</th><th>名称</th><th>类型</th><th>缓冲区</th><th>活跃任务</th><th>消息总数</th><th>已处理</th><th>最后活跃</th><th style="text-align:right">操作</th></tr></thead><tbody>${items.map(s=>`<tr><td style="font-family:'Space Grotesk';font-size:11px;color:#94a3b8" title="${esc(s.session_id)}">${esc(tr(s.session_id,20))}</td><td style="font-weight:500">${esc(s.display_name)}</td><td><span class="pill ${s.session_type==='group'?'pill-purple':'pill-blue'}">${s.session_type==='group'?'群聊':'私聊'}</span></td><td style="text-align:center">${s.buffer_count||0}</td><td>${s.active_task_id?`<a style="cursor:pointer;font-family:'Space Grotesk';font-size:11px;color:#0a7f73;text-decoration:underline" onclick="showTask('${s.active_task_id}')">${s.active_task_id}</a>`:'<span style="color:#cbd5e1">-</span>'}</td><td style="text-align:center">${s.message_count}</td><td style="text-align:center">${s.total_processed}</td><td style="font-size:11px;color:#94a3b8;white-space:nowrap">${ts(s.last_message_time)}</td><td style="text-align:right;white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="showBuf('${esc(s.session_id)}','${esc(s.display_name)}')" title="查看缓冲区"><i class="fa-solid fa-layer-group"></i></button>${s.active_task_id?` <button class="btn btn-danger btn-sm" onclick="deact('${esc(s.session_id)}')" title="结束任务"><i class="fa-solid fa-stop"></i></button>`:''}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><i class="fa-solid fa-comments"></i><p>暂无会话记录</p></div>'}
+    </div></div></div>`;
+}
+async function showBuf(sid,name){ const d=await api(`/api/local-proxy/sessions/${encodeURIComponent(sid)}/buffer`); if(!d||d.error)return; const buf=d.buffer||[]; openModal(`缓冲区 - ${name||sid}`,`<div style="font-size:12px;color:#94a3b8;margin-bottom:14px">共 ${buf.length} 条缓冲消息（下次触发时一起发送给 Agent）</div>${buf.length?buf.map(m=>`<div style="padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;font-size:12px"><div style="display:flex;gap:8px;margin-bottom:4px"><span style="color:#94a3b8;font-size:11px">${ts(m.time)}</span><span style="color:#0a7f73;font-weight:500">${esc(m.source||'')}</span></div><div style="color:#475569">${esc(m.text)}</div></div>`).join(''):'<div class="empty" style="padding:24px"><p>缓冲区为空</p></div>'}`,`<button class="btn btn-outline" onclick="closeModal()">关闭</button>`); }
+function deact(sid){ openModal('结束任务',`<p style="font-size:13px;color:#475569">确定要结束会话 <strong style="color:#1e293b">${esc(sid)}</strong> 的活跃任务吗？任务将标记为自动完成。</p>`,`<button class="btn btn-outline" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doDeact('${esc(sid)}')">确认结束</button>`); }
+async function doDeact(sid){ const r=await api(`/api/local-proxy/sessions/${encodeURIComponent(sid)}/deactivate`,{method:'POST'}); if(r&&r.status==='ok'){toast('任务已结束','success');closeModal();vSessions()} }
+
+/* ========== 操作日志 ========== */
+async function vAudit(){
+  setTopActions('');
+  const d=await api('/api/local-proxy/audit?limit=500'); if(!d)return;
+  const items=d.items||[];
+  const cc={permission:'red',task:'blue',approval:'amber',config:'purple',system:'gray'};
+  const counts={}; items.forEach(e=>{counts[e.category]=(counts[e.category]||0)+1});
+  document.getElementById('view').innerHTML=`
+    <div class="filter-bar">
+      <button class="filter-btn active" data-f="" onclick="fLog(this,'')">全部 (${items.length})</button>
+      <button class="filter-btn" data-f="permission" onclick="fLog(this,'permission')">权限 (${counts.permission||0})</button>
+      <button class="filter-btn" data-f="task" onclick="fLog(this,'task')">任务 (${counts.task||0})</button>
+      <button class="filter-btn" data-f="approval" onclick="fLog(this,'approval')">审批 (${counts.approval||0})</button>
+      <button class="filter-btn" data-f="config" onclick="fLog(this,'config')">配置 (${counts.config||0})</button>
+    </div>
+    <div class="card"><div class="card-body" style="max-height:calc(100vh - 200px);overflow-y:auto" id="log-list">
+      ${items.length?items.map(e=>`<div class="log-entry" data-c="${e.category}"><span class="log-time">${ts(e.timestamp)}</span><span style="flex-shrink:0"><span class="pill pill-${cc[e.category]||'gray'}">${e.category||'-'}</span></span><span class="log-detail">${esc(e.detail)}</span></div>`).join(''):'<div class="empty"><i class="fa-solid fa-rectangle-list"></i><p>暂无日志</p></div>'}
+    </div></div>`;
+}
+function fLog(btn,cat){ btn.closest('.filter-bar').querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); document.querySelectorAll('#log-list .log-entry').forEach(el=>{ el.style.display=(!cat||el.dataset.c===cat)?'':'none'; }); }
+
+/* ========== 系统设置 ========== */
+async function vSettings(){
+  setTopActions('');
+  const[c,h]=await Promise.all([api('/api/local-proxy/config'),api('/api/local-proxy/weflow/health')]); if(!c)return;
+  document.getElementById('view').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="card"><div class="card-head"><h3><i class="fa-solid fa-plug" style="color:#0a7f73;margin-right:6px"></i>WeFlow 连接</h3></div><div class="card-body">
+        <div class="form-group"><label class="form-label">API 地址</label><input class="form-input" id="s-wapi" value="${esc(c.weflow_api)}"></div>
+        <div class="form-group"><label class="form-label">Access Token</label><input class="form-input" id="s-wtok" type="password" value="${esc(c.weflow_token)}" placeholder="在 WeFlow 设置页获取"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px"><span class="status-dot ${h&&h.status==='ok'?'green':'red'}"></span><span style="font-size:13px;color:#475569">${h&&h.status==='ok'?'WeFlow 服务正常':'无法连接 WeFlow'}</span></div>
+        <button class="btn btn-brand btn-sm" onclick="svSettings()"><i class="fa-solid fa-floppy-disk"></i> 保存配置</button>
+      </div></div>
+      <div class="card"><div class="card-head"><h3><i class="fa-solid fa-paper-plane" style="color:#d97706;margin-right:6px"></i>主动发送测试</h3></div><div class="card-body">
+        <div class="form-hint" style="margin-bottom:14px">通过 CoPaw → py4wx 管道向指定微信会话发送测试消息</div>
+        <div class="form-group"><label class="form-label">目标 sessionId</label><input class="form-input" id="s-target" placeholder="wxid_xxx 或 xxx@chatroom"></div>
+        <div class="form-group"><label class="form-label">消息内容</label><input class="form-input" id="s-msg" placeholder="测试消息内容"></div>
+        <button class="btn btn-brand btn-sm" onclick="doSend()"><i class="fa-solid fa-paper-plane"></i> 发送</button>
+      </div></div>
+    </div>
+    <div class="card" style="margin-top:20px"><div class="card-head"><h3><i class="fa-solid fa-file-export" style="color:#059669;margin-right:6px"></i>配置导入导出</h3></div><div class="card-body">
+      <div class="form-hint" style="margin-bottom:14px">导出当前频道配置（local_proxy 部分）用于备份，或从备份文件恢复。</div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-sm" onclick="exCfg()"><i class="fa-solid fa-download"></i> 导出配置</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('imp-f').click()"><i class="fa-solid fa-upload"></i> 导入配置</button>
+        <input type="file" id="imp-f" accept=".json" style="display:none" onchange="imCfg(event)">
+      </div>
+    </div></div>
+    <div class="card" style="margin-top:20px"><div class="card-head"><h3><i class="fa-solid fa-book" style="color:#0a7f73;margin-right:6px"></i>API 接口文档</h3></div><div class="card-body flush"><div style="overflow-x:auto">
+      <table class="tbl" style="font-size:11px"><thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead><tbody>
+        ${[['GET','/api/local-proxy/admin','管理后台页面'],['GET','/api/local-proxy/','网关状态'],['GET','/api/local-proxy/config','获取配置'],['PUT','/api/local-proxy/config','更新配置（写 agent.json）'],['GET','/api/local-proxy/stats','统计数据'],['GET','/api/local-proxy/blacklist','黑名单列表'],['POST','/api/local-proxy/blacklist','添加黑名单'],['DELETE','/api/local-proxy/blacklist/{sid}','删除黑名单'],['GET','/api/local-proxy/tasks','任务列表 (?status=, ?session_id=)'],['GET','/api/local-proxy/tasks/{id}','任务详情'],['GET','/api/local-proxy/approvals','审批列表 (?status=)'],['POST','/api/local-proxy/approvals/{id}/respond','处理审批'],['GET','/api/local-proxy/sessions','会话列表'],['GET','/api/local-proxy/sessions/{sid}/buffer','缓冲区'],['POST','/api/local-proxy/sessions/{sid}/deactivate','结束任务'],['GET','/api/local-proxy/audit','操作日志 (?category=)'],['GET','/api/local-proxy/weflow/health','WeFlow 健康检查'],['POST','/api/local-proxy/proactive-send','主动发送消息'],['POST','/api/local-proxy/send','[兼容] 同步发送'],['POST','/api/local-proxy/callback','[兼容] 异步入队']].map(([m,p,d])=>`<tr><td><span class="pill ${m==='GET'?'pill-blue':m==='DELETE'?'pill-red':'pill-green'}" style="min-width:52px;justify-content:center">${m}</span></td><td style="font-family:'Space Grotesk';font-size:11px;color:#475569;white-space:nowrap">${p}</td><td style="color:#64748b">${d}</td></tr>`).join('')}
+      </tbody></table>
+    </div></div></div>`;
+}
+async function svSettings(){ const r=await api('/api/local-proxy/config',{method:'PUT',body:{weflow_api:document.getElementById('s-wapi').value.trim(),weflow_token:document.getElementById('s-wtok').value.trim()}}); if(r&&r.status==='ok')toast('已保存（WeFlow 重连需重启服务）','success');else toast('保存失败','error'); }
+async function doSend(){ const t=document.getElementById('s-target').value.trim(),x=document.getElementById('s-msg').value.trim(); if(!t||!x){toast('请填写完整','warn');return} const r=await api('/api/local-proxy/proactive-send',{method:'POST',body:{target_session_id:t,text:x}}); if(r&&r.status==='queued')toast('消息已入队，检查微信','success');else toast('发送失败','error'); }
+async function exCfg(){ const c=await api('/api/local-proxy/config/export'); if(!c)return; const b=new Blob([JSON.stringify(c,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`local_proxy_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); toast('已导出','success'); }
+async function imCfg(e){ const f=e.target.files[0]; if(!f)return; try{ const t=await f.text(); window._impd=JSON.parse(t); openModal('确认导入',`<p style="font-size:13px;color:#475569">即将导入 <strong style="color:#1e293b">${esc(f.name)}</strong>，当前配置将被覆盖。</p><div style="margin-top:12px;padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:10px;color:#94a3b8;max-height:160px;overflow:auto;font-family:monospace">${esc(JSON.stringify(window._impd,null,2).slice(0,800))}...</div>`,`<button class="btn btn-outline" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="doImp()">确认覆盖</button>`); }catch(err){toast('文件解析失败','error')} e.target.value=''; }
+async function doImp(){ if(!window._impd)return; const r=await api('/api/local-proxy/config/import',{method:'POST',body:window._impd}); if(r&&r.status==='ok'){toast('配置已导入','success');closeModal();vSettings()}else toast('导入失败','error'); delete window._impd; }
+
+/* ========== 初始化 ========== */
+async function init(){
+  const s=await api('/api/local-proxy/stats');
+  if(s){
+    ub('nb-tk',s.pending_tasks||0); ub('nb-ap',s.pending_approvals||0); ub('nb-bl',s.blacklist_count||0);
+    const el=document.getElementById('sb-st');
+    if(el) el.innerHTML=`<span class="status-dot ${s.weflow_connected?'green':'red'}"></span>${s.weflow_connected?'WeFlow 已连接':'WeFlow 未连接'}`;
+  }
+  go('dashboard');
+  setInterval(async()=>{ const s=await api('/api/local-proxy/stats'); if(s){ ub('nb-tk',s.pending_tasks||0); ub('nb-ap',s.pending_approvals||0); ub('nb-bl',s.blacklist_count||0); } },8000);
+}
+init();
+</script>
+</body>
+</html>

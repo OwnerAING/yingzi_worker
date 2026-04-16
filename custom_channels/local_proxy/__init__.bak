@@ -1,0 +1,245 @@
+"""
+CoPaw Local Proxy Channel — 本地 API 代理通道
+
+通过 HTTP API 收发消息，将 CoPaw/OpenClaw 作为消息处理代理。
+任何外部服务都可以调用此通道发送消息、获取回复。
+
+三种使用模式：
+  1. 异步回调：发送时指定 reply_to URL，Agent 回复后自动 POST 回去
+  2. 同步等待：POST /send 后阻塞等待 Agent 回复再返回
+  3. SSE 推送：通过 EventSource 实时接收回复流
+
+安装：
+  mkdir -p ~/.copaw/custom_channels/local_proxy
+  把本文件放进去作为 __init__.py
+
+配置 agent.json：
+  {
+    "channels": {
+      "local_proxy": {
+        "enabled": true,
+        "bot_prefix": ""
+      }
+    }
+  }
+
+API：
+  GET  /api/local-proxy/                        — 接口说明
+  POST /api/local-proxy/callback                — 异步入队
+  POST /api/local-proxy/send                    — 同步等待回复
+  GET  /api/local-proxy/messages/{session_id}   — 拉取回复
+  DELETE /api/local-proxy/messages/{session_id} — 清除回复
+  GET  /api/local-proxy/stream/{session_id}     — SSE 推送
+  GET  /api/local-proxy/sessions                — 会话列表
+  DELETE /api/local-proxy/sessions/{session_id} — 删除会话
+"""
+
+"""
+CoPaw Local Proxy Channel — 本地 API 代理通道（独立端口版）
+通过 8089 端口提供 HTTP API，将外部消息转发给 CoPaw Agent。
+"""
+import asyncio
+import json
+import time
+import uuid
+import threading
+from collections import defaultdict
+from typing import Optional, Dict, List
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+try:
+    from agentscope_runtime.engine.schemas.agent_schemas import (
+        TextContent, ImageContent, VideoContent,
+        AudioContent, FileContent, ContentType,
+    )
+except ImportError:
+    ContentType = type("CT", (), {"TEXT": "text", "IMAGE": "image", "VIDEO": "video", "AUDIO": "audio", "FILE": "file"})
+    TextContent = lambda **kw: {"type": "text", **kw}
+    ImageContent = lambda **kw: {"type": "image", **kw}
+    VideoContent = lambda **kw: {"type": "video", **kw}
+    AudioContent = lambda **kw: {"type": "audio", **kw}
+    FileContent = lambda **kw: {"type": "file", **kw}
+
+from copaw.app.channels.base import BaseChannel
+
+
+class _MessageStore:
+    def __init__(self):
+        self.messages: Dict[str, List[Dict]] = defaultdict(list)
+        self.session_meta: Dict[str, Dict] = {}
+
+    def append(self, session_id: str, message: Dict):
+        self.messages[session_id].append(message)
+
+    def get_all(self, session_id: str) -> List[Dict]:
+        return list(self.messages.get(session_id, []))
+
+    def clear(self, session_id: str) -> int:
+        count = len(self.messages.get(session_id, []))
+        self.messages[session_id] = []
+        return count
+
+    def delete(self, session_id: str) -> int:
+        count = len(self.messages.pop(session_id, []))
+        self.session_meta.pop(session_id, None)
+        return count
+
+    def sessions(self) -> List[Dict]:
+        result = []
+        for sid, msgs in self.messages.items():
+            meta = self.session_meta.get(sid, {})
+            result.append({
+                "session_id": sid,
+                "user_id": meta.get("user_id"),
+                "message_count": len(msgs),
+                "last_message_at": msgs[-1]["created_at"] if msgs else None,
+            })
+        result.sort(key=lambda s: s.get("last_message_at") or 0, reverse=True)
+        return result
+
+store = _MessageStore()
+
+
+class LocalProxyChannel(BaseChannel):
+    channel = "local_proxy"
+    _instance: Optional["LocalProxyChannel"] = None
+
+    def __init__(self, process=None, enabled: bool = True, bot_prefix: str = "", **kwargs):
+        super().__init__(process, on_reply_sent=kwargs.get("on_reply_sent"))
+        self.enabled = enabled
+        self.bot_prefix = bot_prefix
+        LocalProxyChannel._instance = self
+        print("===== [local_proxy] 实例已创建 =====")
+
+    @classmethod
+    def from_config(cls, process, config, on_reply_sent=None, show_tool_details=True):
+        return cls(process=process, enabled=getattr(config, "enabled", True),
+                   bot_prefix=getattr(config, "bot_prefix", ""), on_reply_sent=on_reply_sent)
+
+    @classmethod
+    def from_env(cls, process, on_reply_sent=None):
+        return cls(process=process, on_reply_sent=on_reply_sent)
+
+    async def start(self):
+        # 启动独立端口的 HTTP 服务（不依赖 CoPaw 的 FastAPI 路由注入）
+        server = HTTPServer(('0.0.0.0', 8089), _RequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        print("===== [local_proxy] 独立 API 服务已启动: http://localhost:8089 =====")
+
+    async def stop(self):
+        pass
+
+    def get_to_handle_from_request(self, request):
+        return request.channel_meta.get("session_id", request.user_id)
+
+    def build_agent_request_from_native(self, native_payload):
+        payload = native_payload if isinstance(native_payload, dict) else {}
+        sender_id = payload.get("user_id") or "anonymous"
+        session_id = payload.get("session_id") or sender_id
+        meta = payload.get("metadata") or {}
+
+        session_info = {"reply_to": payload.get("reply_to"), "user_id": sender_id}
+        store.session_meta[session_id] = session_info
+        meta["_session_info"] = session_info
+        meta["session_id"] = session_id
+
+        content_parts = []
+        text = payload.get("text", "")
+        if text:
+            content_parts.append(TextContent(type=ContentType.TEXT, text=text))
+
+        for att in payload.get("attachments") or []:
+            t = (att.get("type") or "file").lower()
+            url = att.get("url") or ""
+            if not url: continue
+            if t == "image":
+                content_parts.append(ImageContent(type=ContentType.IMAGE, image_url=url))
+            elif t == "video":
+                content_parts.append(VideoContent(type=ContentType.VIDEO, video_url=url))
+            elif t == "audio":
+                content_parts.append(AudioContent(type=ContentType.AUDIO, data=url))
+            else:
+                content_parts.append(FileContent(type=ContentType.FILE, file_url=url))
+
+        if not content_parts:
+            content_parts = [TextContent(type=ContentType.TEXT, text="")]
+
+        request = self.build_agent_request_from_user_content(
+            channel_id=self.channel, sender_id=sender_id, session_id=session_id,
+            content_parts=content_parts, channel_meta=meta,
+        )
+        request.channel_meta = meta
+        return request
+
+    async def send(self, to_handle, text, meta=None):
+        session_id = to_handle
+        message = {
+            "id": str(uuid.uuid4()), "session_id": session_id, "text": text,
+            "created_at": time.time(),
+        }
+        store.append(session_id, message)
+
+    @classmethod
+    def get_instance(cls) -> "LocalProxyChannel":
+        if cls._instance is None:
+            raise Exception("LocalProxy channel 尚未初始化")
+        return cls._instance
+
+
+class _RequestHandler(BaseHTTPRequestHandler):
+    def _send_json(self, data, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length)
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError:
+            return self._send_json({"error": "Invalid JSON"}, 400)
+
+        ch = LocalProxyChannel.get_instance()
+        if not ch or not ch.enabled:
+            return self._send_json({"error": "Channel disabled"}, 403)
+
+        session_id = data.get("session_id") or data.get("user_id") or "default"
+        ch._enqueue(data)
+
+        # /send 同步等待，/callback 立即返回
+        if self.path == "/send":
+            before_count = len(store.get_all(session_id))
+            timeout = data.get("timeout", 120)
+            elapsed = 0.0
+            while elapsed < timeout:
+                time.sleep(0.15)
+                elapsed += 0.15
+                current_msgs = store.get_all(session_id)
+                if len(current_msgs) > before_count:
+                    return self._send_json({"status": "ok", "messages": current_msgs[before_count:]})
+            return self._send_json({"status": "timeout", "messages": []})
+        else:
+            return self._send_json({"status": "queued", "session_id": session_id})
+
+    def do_GET(self):
+        if self.path == "/sessions":
+            return self._send_json({"sessions": store.sessions()})
+        elif self.path.startswith("/messages/"):
+            sid = self.path.split("/messages/")[-1]
+            return self._send_json({"messages": store.get_all(sid)})
+        else:
+            return self._send_json({"status": "local_proxy_running_on_8089"})
+
+    def do_DELETE(self):
+        if self.path.startswith("/messages/"):
+            sid = self.path.split("/messages/")[-1]
+            return self._send_json({"cleared": store.clear(sid)})
+        elif self.path.startswith("/sessions/"):
+            sid = self.path.split("/sessions/")[-1]
+            return self._send_json({"removed": store.delete(sid)})
+            
+    def log_message(self, format, *args):
+        pass # 静默日志防刷屏
