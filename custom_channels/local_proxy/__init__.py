@@ -359,29 +359,137 @@ class LocalProxyChannel(BaseChannel):
 
     # ==================== 老板审批 ====================
     async def _handle_boss_response(self, data, content):
+        """
+        处理老板私聊消息。老板消息有两种用途：
+        1. 审批响应：回复待审批的任务（包含"同意/拒绝/批"等关键词）
+        2. 跨会话查询：查询其他会话的历史消息或状态（如"查一下客户 A 的消息"、"显示所有任务"）
+        """
+        content_lower = content.strip().lower()
+        
+        # ① 检查是否是审批响应
         pending = [a for a in G_APPROVALS.values() if a.status == "pending"]
-        if not pending:
-            await audit("boss_ignored", "approval", f"老板消息无待审批: {content[:50]}")
+        is_approval_response = any(kw in content_lower for kw in ["同意", "可以", "批", "ok", "拒绝", "不行", "不要", "否", "no"])
+        
+        if pending and is_approval_response:
+            approval = max(pending, key=lambda a: a.created_at)
+            reject = any(kw in content_lower for kw in ["拒绝", "不行", "不要", "否", "no"])
+            if reject:
+                await self._do_respond_approval(approval.id, content, False)
+                task = G_TASKS.get(approval.task_id)
+                if task:
+                    S.add(task.session_id, {"id":str(uuid.uuid4()),"session_id":task.session_id,
+                        "text":"很抱歉，您的请求未获得批准。","created_at":_now(),"msg_type":"system"})
+            else:
+                await self._do_respond_approval(approval.id, content, True)
+                task = G_TASKS.get(approval.task_id)
+                if task:
+                    task.status = "processing"; task.updated_at = _now()
+                    self._route_enqueue(task.agent_id, {
+                        "session_id": f"_continue_{task.id}",
+                        "text": f"[老板已批准] 指示：{content}\n继续执行：{task.content[:200]}",
+                        "metadata": {"_continuation":True,"_original_task_id":task.id,"_original_session_id":task.session_id}
+                    })
             return
-        approval = max(pending, key=lambda a: a.created_at)
-        rl = content.strip().lower()
-        reject = any(kw in rl for kw in ["拒绝","不行","不要","否","no"])
-        if reject:
-            await self._do_respond_approval(approval.id, content, False)
-            task = G_TASKS.get(approval.task_id)
-            if task:
-                S.add(task.session_id, {"id":str(uuid.uuid4()),"session_id":task.session_id,
-                    "text":"很抱歉，您的请求未获得批准。","created_at":_now(),"msg_type":"system"})
-        else:
-            await self._do_respond_approval(approval.id, content, True)
-            task = G_TASKS.get(approval.task_id)
-            if task:
-                task.status = "processing"; task.updated_at = _now()
-                self._route_enqueue(task.agent_id, {
-                    "session_id": f"_continue_{task.id}",
-                    "text": f"[老板已批准] 指示: {content}\n继续执行: {task.content[:200]}",
-                    "metadata": {"_continuation":True,"_original_task_id":task.id,"_original_session_id":task.session_id}
+        
+        # ② 检查是否是跨会话查询命令
+        await self._handle_boss_query(content)
+
+    async def _handle_boss_query(self, content):
+        """
+        处理老板的跨会话查询请求。支持以下命令：
+        - 查一下 [客户名/群名] 的消息：查看特定会话的历史消息
+        - 显示所有任务/会话：查看所有活跃任务和会话
+        - [客户名] 的任务状态：查看特定客户的任务状态
+        - 最近消息：显示最近的所有消息
+        """
+        content_lower = content.strip().lower()
+        
+        # ① 查询特定会话的消息
+        if any(kw in content_lower for kw in ["查一下", "查看", "看看", "历史消息"]):
+            # 尝试提取会话名称
+            target_session = None
+            for sid, ctx in G_SESSIONS.items():
+                if ctx.display_name in content or ctx.session_id in content:
+                    target_session = sid
+                    break
+            
+            if target_session:
+                ctx = G_SESSIONS.get(target_session)
+                msgs = S.get(target_session)
+                response = f"【{ctx.display_name}】的聊天记录:\n"
+                if msgs:
+                    for m in msgs[-20:]:  # 最近 20 条
+                        response += f"- {m.get('text', '')[:100]}\n"
+                else:
+                    response += "(暂无消息记录)"
+                
+                # 通过主动发送回复给老板
+                self._enqueue_proactive({
+                    "type": "boss_query_result",
+                    "target_wxid": self.boss_name,
+                    "text": response,
                 })
+                await audit("boss_query_session", "query", f"查询会话:{ctx.display_name}", target_session)
+            else:
+                # 未找到匹配的会话，列出所有会话
+                session_list = "\n".join([f"- {ctx.display_name} ({ctx.message_count}条消息)" 
+                                          for ctx in G_SESSIONS.values()])
+                response = f"未找到匹配的会话，当前所有会话:\n{session_list}"
+                self._enqueue_proactive({
+                    "type": "boss_query_result",
+                    "target_wxid": self.boss_name,
+                    "text": response,
+                })
+            return
+        
+        # ② 显示所有任务/会话
+        if any(kw in content_lower for kw in ["所有任务", "所有会话", "全部任务", "全部会话", "显示所有"]):
+            task_list = []
+            for tid, task in G_TASKS.items():
+                status_emoji = {"processing":"⏳","approved":"✅","completed":"✔️","failed":"❌","awaiting_approval":"🔐"}.get(task.status, "❓")
+                task_list.append(f"{status_emoji} {task.session_name}: {task.content[:50]}... ({task.status})")
+            
+            response = "【所有任务】\n" + "\n".join(task_list[:20]) if task_list else "暂无任务"
+            self._enqueue_proactive({
+                "type": "boss_query_result",
+                "target_wxid": self.boss_name,
+                "text": response,
+            })
+            await audit("boss_query_all_tasks", "query", "查询所有任务")
+            return
+        
+        # ③ 查询特定任务状态
+        if "状态" in content_lower or "进度" in content_lower:
+            for tid, task in G_TASKS.items():
+                if task.session_name in content or task.content[:50] in content:
+                    response = f"【任务状态】\n客户：{task.session_name}\n内容：{task.content[:100]}\n状态：{task.status}\n结果：{task.result or task.error or '进行中'}"
+                    self._enqueue_proactive({
+                        "type": "boss_query_result",
+                        "target_wxid": self.boss_name,
+                        "text": response,
+                    })
+                    await audit("boss_query_task", "query", f"查询任务:{tid}")
+                    return
+            
+            response = "未找到匹配的任务"
+            self._enqueue_proactive({
+                "type": "boss_query_result",
+                "target_wxid": self.boss_name,
+                "text": response,
+            })
+            return
+        
+        # ④ 默认：如果无法识别，提示可用命令
+        help_text = ("老板，您可以使用以下命令:\n"
+                   "- 查一下 [客户名] 的消息\n"
+                   "- 显示所有任务\n"
+                   "- [客户名] 的任务状态")
+        self._enqueue_proactive({
+            "type": "boss_query_result",
+            "target_wxid": self.boss_name,
+            "text": help_text,
+        })
+
 
     async def _do_respond_approval(self, aid, response, approved):
         a = G_APPROVALS.get(aid)
